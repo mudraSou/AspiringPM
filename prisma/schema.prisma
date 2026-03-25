@@ -1,0 +1,514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================
+// AUTH & USER (NextAuth v5 compatible)
+// =============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String?
+  image         String?
+  authProvider  String    @default("email")
+
+  currentRole       String?
+  company           String?
+  yearsOfExperience String?
+  industry          String?
+
+  targetPmRole     String?
+  preparationStage String?
+
+  onboardingCompleted Boolean @default(false)
+  onboardingStep      String  @default("resume")
+
+  publicProfileSlug String? @unique
+  profileVisibility Json    @default("{\"skills\": true, \"experiences\": true, \"assignments\": true, \"activity\": true}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  workExperiences      WorkExperience[]
+  experienceEntries    ExperienceEntry[]
+  userSkillScores      UserSkillScore[]
+  readinessSnapshots   ReadinessSnapshot[]
+  learningPath         UserLearningPath?
+  stageProgress        StageProgress[]
+  jobDescriptions      JobDescription[]
+  resumeVersions       ResumeVersion[]
+  questionAttempts     QuestionAttempt[]
+  activityLogs         ActivityLog[]
+  streakRecord         StreakRecord?
+  conversationSessions ConversationSession[]
+  passwordResetTokens  PasswordResetToken[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// =============================================
+// WORK EXPERIENCE
+// =============================================
+
+model WorkExperience {
+  id             String    @id @default(cuid())
+  userId         String
+  companyName    String?
+  roleTitle      String?
+  startDate      DateTime?
+  endDate        DateTime?
+  rawDescription String?   @db.Text
+  source         String    @default("resume")
+  orderIndex     Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experienceEntries ExperienceEntry[]
+
+  @@index([userId])
+  @@map("work_experiences")
+}
+
+// =============================================
+// EXPERIENCE ENTRIES (PSI reframed)
+// =============================================
+
+model ExperienceEntry {
+  id               String  @id @default(cuid())
+  userId           String
+  workExperienceId String?
+
+  problemStatement    String? @db.Text
+  solutionDescription String? @db.Text
+  impactDescription   String? @db.Text
+  impactMetrics       Json?
+  metricsVerified     Boolean @default(false)
+
+  resumePoint String? @db.Text
+
+  priority  String @default("medium")
+  source    String @default("ai_generated")
+  skillTags Json   @default("[]")
+
+  highlighted Boolean @default(false)
+  orderIndex  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workExperience WorkExperience? @relation(fields: [workExperienceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("experience_entries")
+}
+
+// =============================================
+// SKILLS TAXONOMY
+// =============================================
+
+model SkillCategory {
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+  orderIndex  Int
+
+  createdAt DateTime @default(now())
+
+  skills           Skill[]
+  roleSkillWeights RoleSkillWeight[]
+
+  @@map("skill_categories")
+}
+
+model Skill {
+  id            String  @id @default(cuid())
+  categoryId    String
+  name          String
+  description   String? @db.Text
+  evidenceTypes Json    @default("[]")
+  orderIndex    Int
+
+  createdAt DateTime @default(now())
+
+  category        SkillCategory    @relation(fields: [categoryId], references: [id])
+  userSkillScores UserSkillScore[]
+  subTopics       LearningSubTopic[]
+
+  @@map("skills")
+}
+
+model RoleSkillWeight {
+  id              String  @id @default(cuid())
+  pmRoleType      String
+  skillCategoryId String
+  weight          Decimal @db.Decimal(5, 4)
+
+  skillCategory SkillCategory @relation(fields: [skillCategoryId], references: [id])
+
+  @@unique([pmRoleType, skillCategoryId])
+  @@map("role_skill_weights")
+}
+
+// =============================================
+// USER SKILL SCORES
+// =============================================
+
+model UserSkillScore {
+  id      String @id @default(cuid())
+  userId  String
+  skillId String
+
+  evidenceScore   Int @default(0)
+  assignmentScore Int @default(0)
+  learningScore   Int @default(0)
+  overallScore    Int @default(0)
+
+  evidenceJustification String? @db.Text
+
+  lastEvaluatedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
+
+  @@unique([userId, skillId])
+  @@index([userId])
+  @@map("user_skill_scores")
+}
+
+// =============================================
+// READINESS SNAPSHOTS
+// =============================================
+
+model ReadinessSnapshot {
+  id             String @id @default(cuid())
+  userId         String
+  overallScore   Int
+  categoryScores Json
+  targetRole     String
+  triggeredBy    String
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("readiness_snapshots")
+}
+
+// =============================================
+// LEARNING PATH
+// =============================================
+
+model LearningStage {
+  id              String  @id @default(cuid())
+  name            String
+  description     String? @db.Text
+  skillCategories Json
+  orderIndex      Int
+  estimatedHoursMin Int?
+  estimatedHoursMax Int?
+
+  gateAssignmentPrompt String? @db.Text
+  gateAssignmentRubric Json?
+  gatePassingScore     Int     @default(60)
+
+  skipIfScoreAbove Int  @default(70)
+  optionalForRoles Json @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subTopics     LearningSubTopic[]
+  stageProgress StageProgress[]
+  questions     Question[]
+
+  @@map("learning_stages")
+}
+
+model LearningSubTopic {
+  id          String  @id @default(cuid())
+  stageId     String
+  name        String
+  description String? @db.Text
+  orderIndex  Int
+
+  resources Json
+
+  quickCheckPrompt String? @db.Text
+  quickCheckType   String  @default("text")
+  quickCheckRubric Json?
+
+  optionalIfSkilled Boolean @default(false)
+  relatedSkillId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stage        LearningStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  relatedSkill Skill?        @relation(fields: [relatedSkillId], references: [id])
+  stageProgress StageProgress[]
+
+  @@map("learning_sub_topics")
+}
+
+model UserLearningPath {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  stageConfig Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_learning_paths")
+}
+
+model StageProgress {
+  id         String  @id @default(cuid())
+  userId     String
+  stageId    String
+  subTopicId String?
+
+  status String @default("not_started")
+
+  resourcesCompleted Json    @default("[]")
+  quickCheckResponse String? @db.Text
+  quickCheckScore    Int?
+  quickCheckFeedback String? @db.Text
+
+  gateSubmission        String?   @db.Text
+  gateSubmissionUrl     String?
+  gateSubmissionFileUrl String?
+  gateScore             Int?
+  gateFeedback          String?   @db.Text
+  gateSubmittedAt       DateTime?
+  gateEvaluatedAt       DateTime?
+
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stage    LearningStage     @relation(fields: [stageId], references: [id])
+  subTopic LearningSubTopic? @relation(fields: [subTopicId], references: [id])
+
+  @@unique([userId, stageId, subTopicId])
+  @@index([userId])
+  @@map("stage_progress")
+}
+
+// =============================================
+// RESUME BUILDER
+// =============================================
+
+model JobDescription {
+  id                String  @id @default(cuid())
+  userId            String
+  title             String?
+  company           String?
+  description       String  @db.Text
+  extractedKeywords Json?
+  source            String  @default("manual")
+
+  createdAt DateTime @default(now())
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeVersions ResumeVersion[]
+
+  @@map("job_descriptions")
+}
+
+model ResumeVersion {
+  id     String  @id @default(cuid())
+  userId String
+  jdId   String?
+
+  content     Json
+  atsScore    Int?
+  atsDetails  Json?
+  aiRationale Json?
+  version     Int  @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jd   JobDescription? @relation(fields: [jdId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("resume_versions")
+}
+
+// =============================================
+// QUESTION BANK
+// =============================================
+
+model Question {
+  id           String  @id @default(cuid())
+  category     String
+  subCategory  String?
+  questionText String  @db.Text
+  difficulty   Int     @default(2)
+
+  relatedSkills Json @default("[]")
+
+  evaluationCriteria Json
+  minExpectations    String? @db.Text
+  sampleAnswerPoints Json?
+
+  relatedStageId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  relatedStage     LearningStage?    @relation(fields: [relatedStageId], references: [id])
+  questionAttempts QuestionAttempt[]
+
+  @@index([category])
+  @@map("questions")
+}
+
+model QuestionAttempt {
+  id         String @id @default(cuid())
+  userId     String
+  questionId String
+
+  answerText      String  @db.Text
+  aiScore         Int?
+  aiFeedback      String? @db.Text
+  criteriaResults Json?
+
+  createdAt DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@index([userId])
+  @@map("question_attempts")
+}
+
+// =============================================
+// ACTIVITY & STREAKS
+// =============================================
+
+model ActivityLog {
+  id           String @id @default(cuid())
+  userId       String
+  activityType String
+  activityData Json?
+  activityDate DateTime @default(now()) @db.Date
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("activity_log")
+}
+
+model StreakRecord {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  currentStreak    Int       @default(0)
+  longestStreak    Int       @default(0)
+  lastActivityDate DateTime? @db.Date
+
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("streak_records")
+}
+
+// =============================================
+// PASSWORD RESET
+// =============================================
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// =============================================
+// CONVERSATION HISTORY
+// =============================================
+
+model ConversationSession {
+  id          String @id @default(cuid())
+  userId      String
+  sessionType String
+  status      String @default("in_progress")
+
+  messages      Json @default("[]")
+  extractedData Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_sessions")
+}
