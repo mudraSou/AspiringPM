@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
+import LearningProgressCard from "@/components/dashboard/LearningProgressCard";
 import { redirect } from "next/navigation";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -46,7 +47,7 @@ export default async function DashboardPage() {
   if (!session?.user?.id) redirect("/auth/login");
   const userId = session.user.id;
 
-  const [user, snapshot, streakRecord, stages, allProgress, recentActivity] = await Promise.all([
+  const [user, snapshot, streakRecord, stages, allProgress, subTopicCount, completedSubTopicCount, recentActivity] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { name: true, targetPmRole: true, onboardingCompleted: true },
@@ -62,6 +63,10 @@ export default async function DashboardPage() {
     }),
     prisma.stageProgress.findMany({
       where: { userId, subTopicId: null },
+    }),
+    prisma.learningSubTopic.count(),
+    prisma.stageProgress.count({
+      where: { userId, subTopicId: { not: null }, status: "completed" },
     }),
     prisma.activityLog.findMany({
       where: { userId },
@@ -85,7 +90,8 @@ export default async function DashboardPage() {
   const focusKeys = new Set([sortedByScore[0]?.key, sortedByScore[1]?.key]);
 
   const progressMap = new Map(allProgress.map((p) => [p.stageId, p.status]));
-  const completedCount = allProgress.filter((p) => p.status === "completed").length;
+  const completedCount = allProgress.filter((p) => p.status === "completed" || p.status === "skipped").length;
+  const learningPct = subTopicCount > 0 ? Math.round((completedSubTopicCount / subTopicCount) * 100) : 0;
   const currentStage =
     stages.find((s) => progressMap.get(s.id) === "in_progress") ??
     stages.find((s) => !progressMap.has(s.id));
@@ -128,6 +134,46 @@ export default async function DashboardPage() {
             </Link>
           </div>
         )}
+
+        {/* Streak + Learning progress */}
+        <div className="grid sm:grid-cols-2 gap-4 mb-4">
+          {/* Streak */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center gap-5">
+            <div className="text-3xl leading-none">🔥</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Daily Streak</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                {streakRecord?.currentStreak ?? 0}
+                <span className="text-sm font-normal text-gray-400 ml-1">days</span>
+              </div>
+              {streakRecord && streakRecord.longestStreak > 1 && (
+                <div className="text-xs text-gray-400 mt-0.5">Best: {streakRecord.longestStreak} days</div>
+              )}
+            </div>
+            {streakRecord?.currentStreak && streakRecord.currentStreak >= 3 && (
+              <div className="text-xs font-semibold text-orange-500 bg-orange-50 dark:bg-orange-950/40 px-2 py-1 rounded-lg">
+                On fire!
+              </div>
+            )}
+          </div>
+
+          {/* Learning progress % */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-6 py-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-500 uppercase tracking-wider">Learning Progress</div>
+              <span className="text-sm font-bold text-gray-900 dark:text-white">{learningPct}%</span>
+            </div>
+            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-2">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${learningPct >= 100 ? "bg-green-500" : "bg-blue-500"}`}
+                style={{ width: `${learningPct}%` }}
+              />
+            </div>
+            <div className="text-xs text-gray-400">
+              {completedSubTopicCount} / {subTopicCount} sub-topics complete · {completedCount}/{stages.length} stages
+            </div>
+          </div>
+        </div>
 
         {/* Score + next step */}
         <div className="grid sm:grid-cols-2 gap-4 mb-6">
@@ -193,33 +239,16 @@ export default async function DashboardPage() {
 
         {/* Learning progress + quick actions */}
         <div className="grid sm:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900 dark:text-white">Learning Progress</h2>
-              <span className="text-xs text-gray-400">{completedCount}/{stages.length} stages</span>
-            </div>
-            <div className="space-y-2">
-              {stages.slice(0, 6).map((stage) => {
-                const status = progressMap.get(stage.id) ?? "not_started";
-                return (
-                  <div key={stage.id} className="flex items-center gap-3 text-sm">
-                    <span className="w-5 flex-shrink-0 text-base">
-                      {status === "completed" ? "✅" : status === "in_progress" ? "◉" : "○"}
-                    </span>
-                    <span className={`${status === "completed" ? "text-gray-400 line-through" : status === "in_progress" ? "text-gray-900 dark:text-white font-medium" : "text-gray-400 dark:text-gray-600"}`}>
-                      {stage.name}
-                    </span>
-                  </div>
-                );
-              })}
-              {stages.length > 6 && (
-                <p className="text-xs text-gray-400 pl-8">+{stages.length - 6} more stages</p>
-              )}
-            </div>
-            <Link href="/dashboard/learning" className="block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-              View full path →
-            </Link>
-          </div>
+          <LearningProgressCard
+            completedCount={completedCount}
+            totalStages={stages.length}
+            learningPct={learningPct}
+            completedSubTopics={completedSubTopicCount}
+            totalSubTopics={subTopicCount}
+            stages={stages}
+            progressMap={Object.fromEntries(progressMap)}
+            currentStageName={currentStage?.name ?? null}
+          />
 
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
             <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>

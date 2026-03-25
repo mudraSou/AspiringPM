@@ -31,13 +31,28 @@ export async function GET() {
     progressMap.set(key, p);
   }
 
-  // Determine unlock status — stage N unlocked if stage N-1 completed
-  const result = stages.map((stage, idx) => {
+  // Auto-skip stages where user's overall score exceeds skipIfScoreAbove threshold
+  const overallScore = snapshot?.overallScore ?? 0;
+  const autoSkipOps: Promise<unknown>[] = [];
+  for (const stage of stages) {
+    const alreadyHasProgress = progressMap.has(stage.id);
+    if (!alreadyHasProgress && overallScore >= stage.skipIfScoreAbove) {
+      autoSkipOps.push(
+        prisma.stageProgress.create({
+          data: { userId, stageId: stage.id, status: "skipped", completedAt: new Date() },
+        }).then((created) => {
+          progressMap.set(stage.id, created);
+        })
+      );
+    }
+  }
+  if (autoSkipOps.length > 0) await Promise.all(autoSkipOps);
+
+  const result = stages.map((stage) => {
     const stageProgress = progressMap.get(stage.id);
-    const isCompleted = stageProgress?.status === "completed";
-    const isUnlocked = idx === 0 || stages[idx - 1]
-      ? progressMap.get(stages[idx - 1]?.id ?? "")?.status === "completed" || idx === 0
-      : false;
+    const isCompleted = stageProgress?.status === "completed" || stageProgress?.status === "skipped";
+    const isAutoSkipped = stageProgress?.status === "skipped";
+    const isUnlocked = true; // all stages unlocked
 
     const subTopicProgress: Record<string, {
       status: string;
@@ -85,6 +100,7 @@ export async function GET() {
         resources: st.resources,
         quickCheckPrompt: st.quickCheckPrompt,
         optionalIfSkilled: st.optionalIfSkilled,
+        generatedContent: st.generatedContent ?? null,
       })),
       progress: {
         status: stageProgress?.status ?? "not_started",
@@ -94,12 +110,13 @@ export async function GET() {
       },
       subTopicProgress,
       isUnlocked: isUnlocked || isCompleted,
+      isAutoSkipped,
       canAttemptGate: allSubTopicsDone,
     };
   });
 
   return NextResponse.json({
     stages: result,
-    overallScore: snapshot?.overallScore ?? 0,
+    overallScore,
   });
 }

@@ -290,6 +290,9 @@ model LearningSubTopic {
   quickCheckType   String  @default("text")
   quickCheckRubric Json?
 
+  generatedContent   String?   @db.Text
+  contentGeneratedAt DateTime?
+
   optionalIfSkilled Boolean @default(false)
   relatedSkillId    String?
 
@@ -329,6 +332,8 @@ model StageProgress {
   quickCheckResponse String? @db.Text
   quickCheckScore    Int?
   quickCheckFeedback String? @db.Text
+  quickCheckQuestions Json?   // current attempt MCQs (with correct answers, never sent to client)
+  quickCheckAttempts  Int     @default(0)
 
   gateSubmission        String?   @db.Text
   gateSubmissionUrl     String?

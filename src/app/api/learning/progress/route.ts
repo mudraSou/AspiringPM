@@ -7,8 +7,15 @@ import { analyzeGaps } from "@/lib/agents/gap-analyzer";
 import { logActivity } from "@/lib/activity";
 import { Prisma } from "@prisma/client";
 import { sendGatePassEmail } from "@/lib/email/send";
+import {
+  generateQuickCheckMCQ,
+  scoreQuickCheck,
+  stripAnswers,
+  type QCQuestion,
+} from "@/lib/agents/quickcheck-generator";
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -70,11 +77,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: newStatus, resourcesCompleted: completed });
   }
 
-  // ─── SUBMIT QUICK CHECK ───────────────────────────────────────────────────
-  if (action === "submit_quickcheck") {
-    const { subTopicId, response } = body;
-    if (!subTopicId || !response?.trim()) {
-      return NextResponse.json({ error: "Missing subTopicId or response" }, { status: 400 });
+  // ─── GET QUICK CHECK (generate fresh MCQ) ────────────────────────────────
+  if (action === "get_quickcheck") {
+    const { subTopicId } = body;
+    if (!subTopicId) {
+      return NextResponse.json({ error: "Missing subTopicId" }, { status: 400 });
     }
 
     const rl = await checkAIRateLimit(userId);
@@ -82,37 +89,85 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
     }
 
-    // Quick checks are pass/fail based on length + basic content check
-    // Simple heuristic: >= 50 chars = pass (avoids AI cost for lightweight checks)
-    const passed = response.trim().length >= 50;
-    const score = passed ? 80 : 30;
-    const feedback = passed
-      ? "Good summary — you've captured the key idea."
-      : "Your response is too brief. Try to summarize the main takeaway in 2-3 sentences.";
+    const [subTopic, existing] = await Promise.all([
+      prisma.learningSubTopic.findUnique({
+        where: { id: subTopicId },
+        select: { name: true, description: true, stage: { select: { name: true } } },
+      }),
+      prisma.stageProgress.findUnique({
+        where: { userId_stageId_subTopicId: { userId, stageId, subTopicId } },
+        select: { quickCheckAttempts: true },
+      }),
+    ]);
 
+    if (!subTopic) {
+      return NextResponse.json({ error: "Sub-topic not found" }, { status: 404 });
+    }
+
+    const attemptNumber = (existing?.quickCheckAttempts ?? 0) + 1;
+
+    const questions = await generateQuickCheckMCQ({
+      subTopicName: subTopic.name,
+      stageName: subTopic.stage.name,
+      subTopicDescription: subTopic.description,
+      attemptNumber,
+    });
+
+    // Store full questions (with correct answers) server-side
     await prisma.stageProgress.upsert({
       where: { userId_stageId_subTopicId: { userId, stageId, subTopicId } },
       update: {
-        quickCheckResponse: response,
-        quickCheckScore: score,
-        quickCheckFeedback: feedback,
-        ...(passed ? { status: "completed", completedAt: new Date() } : {}),
+        quickCheckQuestions: questions as unknown as Prisma.InputJsonValue,
+        quickCheckAttempts: attemptNumber,
       },
       create: {
         userId,
         stageId,
         subTopicId,
-        quickCheckResponse: response,
-        quickCheckScore: score,
-        quickCheckFeedback: feedback,
-        status: passed ? "completed" : "in_progress",
-        ...(passed ? { completedAt: new Date() } : {}),
+        quickCheckQuestions: questions as unknown as Prisma.InputJsonValue,
+        quickCheckAttempts: attemptNumber,
       },
     });
 
-    await logActivity(userId, "quickcheck_submitted", { stageId, subTopicId, score });
+    // Return questions WITHOUT correct answers
+    return NextResponse.json({ questions: stripAnswers(questions), attemptNumber });
+  }
 
-    return NextResponse.json({ score, feedback, passed });
+  // ─── SUBMIT QUICK CHECK (score MCQ answers) ───────────────────────────────
+  if (action === "submit_quickcheck") {
+    const { subTopicId, answers } = body;
+    if (!subTopicId || !answers || typeof answers !== "object") {
+      return NextResponse.json({ error: "Missing subTopicId or answers" }, { status: 400 });
+    }
+
+    const progress = await prisma.stageProgress.findUnique({
+      where: { userId_stageId_subTopicId: { userId, stageId, subTopicId } },
+      select: { quickCheckQuestions: true },
+    });
+
+    if (!progress?.quickCheckQuestions) {
+      return NextResponse.json({ error: "No active quick check — call get_quickcheck first" }, { status: 400 });
+    }
+
+    const storedQuestions = progress.quickCheckQuestions as unknown as QCQuestion[];
+    const { score, correctCount, passed, results } = scoreQuickCheck(storedQuestions, answers);
+
+    const feedback = passed
+      ? `You got ${correctCount}/3 correct — great work!`
+      : `You got ${correctCount}/3 correct. Review the explanations and try again.`;
+
+    await prisma.stageProgress.update({
+      where: { userId_stageId_subTopicId: { userId, stageId, subTopicId } },
+      data: {
+        quickCheckScore: score,
+        quickCheckFeedback: feedback,
+        ...(passed ? { status: "completed", completedAt: new Date() } : {}),
+      },
+    });
+
+    await logActivity(userId, "quickcheck_submitted", { stageId, subTopicId, score, passed });
+
+    return NextResponse.json({ score, feedback, passed, results });
   }
 
   // ─── SUBMIT GATE ASSIGNMENT ───────────────────────────────────────────────
@@ -241,4 +296,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
