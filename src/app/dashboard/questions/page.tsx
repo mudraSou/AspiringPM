@@ -57,9 +57,11 @@ function PracticePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answer }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Evaluation failed"); return; }
-      setResult(data);
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore */ }
+      if (!res.ok) { setError((data.error as string) ?? "Evaluation failed"); return; }
+      setResult(data as unknown as EvalResult);
     } finally {
       setSubmitting(false);
     }
@@ -112,7 +114,7 @@ function PracticePanel({
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Criteria</p>
                 <div className="space-y-1.5">
-                  {result.criteriaResults.map((c, i) => (
+                  {(Array.isArray(result.criteriaResults) ? result.criteriaResults : []).map((c, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
                       <span className={`flex-shrink-0 ${c.met ? "text-green-500" : "text-red-400"}`}>{c.met ? "✓" : "✗"}</span>
                       <div>

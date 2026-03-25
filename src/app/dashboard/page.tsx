@@ -24,23 +24,93 @@ const CATEGORY_LABELS: Record<string, string> = {
   cat_leadership: "Leadership",
 };
 
-function ScoreBar({ score, label, isFocus }: { score: number; label: string; isFocus: boolean }) {
-  const color = score >= 70 ? "bg-green-500" : score >= 45 ? "bg-yellow-500" : "bg-red-400";
+function ScoreRing({ score }: { score: number }) {
+  const r = 52;
+  const circ = 2 * Math.PI * r;
+  const filled = (score / 100) * circ;
+  const gap = circ - filled;
+  const color =
+    score >= 70 ? "stroke-green-500" : score >= 45 ? "stroke-amber-400" : "stroke-indigo-500";
+  const textColor =
+    score >= 70 ? "text-green-600" : score >= 45 ? "text-amber-500" : "text-indigo-600";
+
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm text-gray-600 dark:text-gray-400 w-36 flex-shrink-0">{label}</span>
-      <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
+    <div className="flex flex-col items-center gap-3">
+      <div className="relative">
+        <svg width="136" height="136" viewBox="0 0 136 136">
+          <circle cx="68" cy="68" r={r} fill="none" className="stroke-gray-100 dark:stroke-gray-800" strokeWidth="10" />
+          {score > 0 && (
+            <circle
+              cx="68" cy="68" r={r}
+              fill="none"
+              className={color}
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeDasharray={`${filled} ${gap}`}
+              strokeDashoffset={circ / 4}
+              style={{ transition: "stroke-dasharray 1s ease-out" }}
+            />
+          )}
+          <text x="68" y="62" textAnchor="middle" className="fill-gray-900 dark:fill-white" fontSize="26" fontWeight="700">
+            {score}%
+          </text>
+          <text x="68" y="78" textAnchor="middle" className="fill-gray-400" fontSize="9" letterSpacing="1.5">
+            READINESS
+          </text>
+        </svg>
       </div>
-      <span className={`text-sm font-semibold w-10 text-right ${score >= 70 ? "text-green-600" : score >= 45 ? "text-yellow-600" : "text-red-500"}`}>
-        {score}%
-      </span>
-      {isFocus && (
-        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium ml-1">← focus</span>
-      )}
+      <p className={`text-xs font-semibold ${textColor}`}>
+        {score >= 70 ? "Ready to apply" : score >= 45 ? "On track" : "Building foundations"}
+      </p>
     </div>
   );
 }
+
+function SkillCard({
+  label,
+  score,
+  isFocus,
+  rank,
+}: {
+  label: string;
+  score: number;
+  isFocus: boolean;
+  rank: number;
+}) {
+  const bg =
+    score >= 70
+      ? "border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30"
+      : score >= 45
+      ? "border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30"
+      : "border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30";
+  const scoreColor =
+    score >= 70 ? "text-green-700 dark:text-green-400" : score >= 45 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400";
+  const barColor = score >= 70 ? "bg-green-500" : score >= 45 ? "bg-amber-400" : "bg-rose-400";
+
+  return (
+    <div className={`relative rounded-xl border p-3 ${bg} transition-all`}>
+      {isFocus && (
+        <span className="absolute top-2.5 right-2.5 text-[9px] font-bold tracking-wide text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded-full uppercase">
+          Focus
+        </span>
+      )}
+      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2 pr-10">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${score}%` }} />
+        </div>
+        <span className={`text-sm font-bold w-9 text-right ${scoreColor}`}>{score}%</span>
+      </div>
+    </div>
+  );
+}
+
+const activityLabel: Record<string, string> = {
+  resource_completed: "Marked a learning resource as done",
+  quickcheck_submitted: "Completed a quick check",
+  stage_completed: "Completed a learning stage",
+  gate_attempted: "Submitted a gate assignment",
+};
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -80,6 +150,8 @@ export default async function DashboardPage() {
   const score = snapshot?.overallScore ?? 0;
   const categoryScores = snapshot?.categoryScores as Record<string, number> | null;
   const roleLabel = ROLE_LABELS[user?.targetPmRole ?? ""] ?? "PM";
+  const firstName = user?.name?.split(" ")[0] ?? "";
+  const streak = streakRecord?.currentStreak ?? 0;
 
   const skillRows = Object.entries(CATEGORY_LABELS).map(([key, label]) => ({
     key,
@@ -96,186 +168,178 @@ export default async function DashboardPage() {
     stages.find((s) => progressMap.get(s.id) === "in_progress") ??
     stages.find((s) => !progressMap.has(s.id));
 
-  const activityLabel: Record<string, string> = {
-    resource_completed: "Marked a learning resource as done",
-    quickcheck_submitted: "Completed a quick check",
-    stage_completed: "Completed a learning stage",
-    gate_attempted: "Submitted a gate assignment",
-  };
+  // Days-to-milestone estimate: rough heuristic (1 sub-topic/day avg)
+  const remainingSubTopics = subTopicCount - completedSubTopicCount;
+  const nextMilestonePct = [25, 50, 75, 100].find((m) => m > learningPct) ?? 100;
+  const subTopicsToMilestone = Math.round(((nextMilestonePct - learningPct) / 100) * subTopicCount);
 
   return (
-    <>
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {roleLabel} readiness — here&apos;s where you stand today.
-          </p>
-        </div>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
 
-        {/* Apply now banner */}
-        {score >= 70 && (
-          <div className="mb-6 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-2xl p-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-green-800 dark:text-green-200">
-                🎉 You&apos;ve hit {score}% — you&apos;re ready to start applying
-              </p>
-              <p className="text-sm text-green-700 dark:text-green-300 mt-0.5">
-                Your skills meet the threshold for {roleLabel} roles.
-              </p>
-            </div>
-            <Link
-              href="/dashboard/resume"
-              className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-700 transition-colors flex-shrink-0"
-            >
-              Build Resume →
-            </Link>
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+              {firstName ? `Hey ${firstName} 👋` : "Welcome back"}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 max-w-lg">
+              {learningPct === 0
+                ? `Your ${roleLabel} journey starts here. Let's build something real.`
+                : learningPct < 50
+                ? `You're ${learningPct}% through your ${roleLabel} path. ${subTopicsToMilestone} sub-topics to the ${nextMilestonePct}% milestone.`
+                : learningPct < 100
+                ? `${learningPct}% complete — you're in the top candidates for ${roleLabel} roles.`
+                : `Path complete. Time to land that ${roleLabel} role.`}
+            </p>
           </div>
-        )}
-
-        {/* Streak + Learning progress */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-4">
-          {/* Streak */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center gap-5">
-            <div className="text-3xl leading-none">🔥</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Daily Streak</div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {streakRecord?.currentStreak ?? 0}
-                <span className="text-sm font-normal text-gray-400 ml-1">days</span>
-              </div>
-              {streakRecord && streakRecord.longestStreak > 1 && (
-                <div className="text-xs text-gray-400 mt-0.5">Best: {streakRecord.longestStreak} days</div>
-              )}
-            </div>
-            {streakRecord?.currentStreak && streakRecord.currentStreak >= 3 && (
-              <div className="text-xs font-semibold text-orange-500 bg-orange-50 dark:bg-orange-950/40 px-2 py-1 rounded-lg">
-                On fire!
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {streak > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-1.5 rounded-full">
+                <span className="text-sm">🔥</span>
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">{streak} day streak</span>
               </div>
             )}
+            {score >= 70 && (
+              <Link
+                href="/dashboard/resume"
+                className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
+              >
+                Apply Now →
+              </Link>
+            )}
           </div>
+        </div>
 
-          {/* Learning progress % */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-6 py-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs text-gray-500 uppercase tracking-wider">Learning Progress</div>
-              <span className="text-sm font-bold text-gray-900 dark:text-white">{learningPct}%</span>
-            </div>
-            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-2">
+        {/* Progress strip */}
+        {learningPct > 0 && (
+          <div className="mt-5 flex items-center gap-3">
+            <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${learningPct >= 100 ? "bg-green-500" : "bg-blue-500"}`}
+                className="h-full rounded-full bg-indigo-500 transition-all duration-700"
                 style={{ width: `${learningPct}%` }}
               />
             </div>
-            <div className="text-xs text-gray-400">
-              {completedSubTopicCount} / {subTopicCount} sub-topics complete · {completedCount}/{stages.length} stages
-            </div>
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium w-16 text-right">
+              {completedSubTopicCount}/{subTopicCount} done
+            </span>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Score + next step */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Readiness Score</div>
-            <div className={`text-5xl font-bold mb-1 ${score >= 70 ? "text-green-600" : score >= 45 ? "text-yellow-500" : "text-red-500"}`}>
-              {score}%
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">{roleLabel}</div>
-            <Link href="/onboarding/analysis" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
-              View full breakdown →
-            </Link>
-          </div>
+      {/* ── 3-column grid ────────────────────────────────────── */}
+      <div className="grid lg:grid-cols-3 gap-5 mb-6">
 
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Your Next Step</div>
+        {/* Col 1: Readiness score */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 flex flex-col items-center text-center">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-5">Readiness Score</p>
+          <ScoreRing score={score} />
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">{roleLabel}</p>
+
+          {/* Next step CTA */}
+          <div className="w-full mt-5 pt-5 border-t border-gray-100 dark:border-gray-800">
+            <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Next step</p>
             {currentStage ? (
               <>
-                <p className="font-semibold text-gray-900 dark:text-white mb-1">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
                   Stage {currentStage.orderIndex}: {currentStage.name}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  {progressMap.get(currentStage.id) === "in_progress"
-                    ? "In progress — continue where you left off"
-                    : "Next stage ready to start"}
                 </p>
                 <Link
                   href="/dashboard/learning"
-                  className="inline-block bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+                  className="w-full inline-flex items-center justify-center gap-1 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
                 >
                   Continue Learning →
                 </Link>
               </>
             ) : (
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white mb-4">
-                  {completedCount === stages.length && stages.length > 0
-                    ? "All stages complete!"
-                    : "Start Stage 1: PM Fundamentals"}
+              <>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  {completedCount === stages.length && stages.length > 0 ? "All stages complete!" : "Start Stage 1"}
                 </p>
-                <Link href="/dashboard/learning" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+                <Link
+                  href="/dashboard/learning"
+                  className="w-full inline-flex items-center justify-center bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
+                >
                   {completedCount === stages.length ? "Review Path →" : "Start Learning →"}
                 </Link>
-              </div>
+              </>
             )}
           </div>
+
+          <Link href="/onboarding/analysis" className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline mt-3">
+            Full analysis →
+          </Link>
         </div>
 
-        {/* Skill breakdown */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 mb-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-semibold text-gray-900 dark:text-white">Skill Breakdown</h2>
-            <Link href="/onboarding/analysis" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+        {/* Col 2: Skill breakdown (actionable cards) */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900 dark:text-white text-sm">Skill Breakdown</h2>
+            <Link href="/onboarding/analysis" className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline">
               Full analysis →
             </Link>
           </div>
-          <div className="space-y-3">
-            {skillRows.map((row) => (
-              <ScoreBar key={row.key} score={row.score} label={row.label} isFocus={focusKeys.has(row.key)} />
+          <div className="space-y-2">
+            {skillRows.map((row, i) => (
+              <SkillCard
+                key={row.key}
+                label={row.label}
+                score={row.score}
+                isFocus={focusKeys.has(row.key)}
+                rank={i + 1}
+              />
             ))}
           </div>
         </div>
 
-        {/* Learning progress + quick actions */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-6">
-          <LearningProgressCard
-            completedCount={completedCount}
-            totalStages={stages.length}
-            learningPct={learningPct}
-            completedSubTopics={completedSubTopicCount}
-            totalSubTopics={subTopicCount}
-            stages={stages}
-            progressMap={Object.fromEntries(progressMap)}
-            currentStageName={currentStage?.name ?? null}
-          />
+        {/* Col 3: Learning progress */}
+        <LearningProgressCard
+          completedCount={completedCount}
+          totalStages={stages.length}
+          learningPct={learningPct}
+          completedSubTopics={completedSubTopicCount}
+          totalSubTopics={subTopicCount}
+          stages={stages}
+          progressMap={Object.fromEntries(progressMap)}
+          currentStageName={currentStage?.name ?? null}
+        />
+      </div>
 
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-            <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-            <div className="space-y-2">
-              {[
-                { href: "/dashboard/resume", icon: "📄", label: "Build Resume for a JD" },
-                { href: "/dashboard/questions", icon: "💬", label: "Practice Interview Questions" },
-                { href: "/dashboard/profile", icon: "👤", label: "View Public Profile" },
-                { href: "/onboarding/analysis", icon: "📊", label: "View Full Analysis" },
-              ].map((a) => (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm text-gray-700 dark:text-gray-300"
-                >
-                  <span className="text-base">{a.icon}</span>
-                  <span>{a.label}</span>
-                </Link>
-              ))}
-            </div>
+      {/* ── Bottom row: Quick actions + Recent activity ───────── */}
+      <div className="grid sm:grid-cols-2 gap-5">
+
+        {/* Quick actions */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+          <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-4">Quick Actions</h2>
+          <div className="space-y-1.5">
+            {[
+              { href: "/dashboard/resume", icon: "📄", label: "Build Resume for a JD", sub: "AI-powered, JD-matched" },
+              { href: "/dashboard/questions", icon: "💬", label: "Practice Interview Questions", sub: "Role-specific scenarios" },
+              { href: "/dashboard/profile", icon: "👤", label: "View Public Profile", sub: "Share your progress" },
+              { href: "/onboarding/analysis", icon: "📊", label: "View Full Analysis", sub: "Deep skill breakdown" },
+            ].map((a) => (
+              <Link
+                key={a.href}
+                href={a.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group"
+              >
+                <span className="text-xl flex-shrink-0">{a.icon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-800 dark:text-gray-200 font-medium group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {a.label}
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{a.sub}</p>
+                </div>
+                <span className="ml-auto text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition-colors text-sm">→</span>
+              </Link>
+            ))}
           </div>
         </div>
 
         {/* Recent activity */}
-        {recentActivity.length > 0 && (
+        {recentActivity.length > 0 ? (
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-            <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Recent Activity</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-4">Recent Activity</h2>
             <div className="space-y-3">
               {recentActivity.map((a) => {
                 const data = a.activityData as Record<string, unknown> | null;
@@ -287,9 +351,9 @@ export default async function DashboardPage() {
                   : "";
                 return (
                   <div key={a.id} className="flex items-start gap-3 text-sm">
-                    <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 mt-0.5">•</span>
-                    <div>
-                      <span className="text-gray-700 dark:text-gray-300">{label}{detail}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0 mt-1.5" />
+                    <div className="min-w-0">
+                      <span className="text-gray-700 dark:text-gray-300 text-sm">{label}{detail}</span>
                       <span className="text-gray-400 text-xs ml-2">
                         {new Date(a.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
@@ -299,8 +363,20 @@ export default async function DashboardPage() {
               })}
             </div>
           </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 flex flex-col items-center justify-center text-center gap-2">
+            <p className="text-2xl">🚀</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No activity yet</p>
+            <p className="text-xs text-gray-400">Complete your first learning stage to see progress here.</p>
+            <Link
+              href="/dashboard/learning"
+              className="mt-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline"
+            >
+              Start learning →
+            </Link>
+          </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

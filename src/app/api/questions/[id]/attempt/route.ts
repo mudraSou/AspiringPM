@@ -10,6 +10,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  try {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
@@ -23,9 +24,12 @@ export async function POST(
   const question = await prisma.question.findUnique({ where: { id: params.id } });
   if (!question) return NextResponse.json({ error: "Question not found" }, { status: 404 });
 
+  const rawCriteria = question.evaluationCriteria;
+  const evaluationCriteria = Array.isArray(rawCriteria) ? rawCriteria as Array<{ criterion: string; weight: number }> : [];
+
   const evaluation = await evaluateQuestionAnswer({
     questionText: question.questionText,
-    evaluationCriteria: question.evaluationCriteria as Array<{ criterion: string; weight: number }>,
+    evaluationCriteria,
     minExpectations: question.minExpectations,
     sampleAnswerPoints: question.sampleAnswerPoints,
     answer,
@@ -57,4 +61,8 @@ export async function POST(
     improvements: evaluation.improvements,
     modelAnswerHints: evaluation.modelAnswerHints,
   });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Evaluation failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

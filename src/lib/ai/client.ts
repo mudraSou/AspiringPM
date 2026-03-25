@@ -130,22 +130,32 @@ export async function complete(
 
       let lastError: unknown;
       for (const modelName of modelList) {
-        try {
-          const response = await client.chat.completions.create(
-            { model: modelName, max_tokens: maxTokens ?? 2048, temperature, messages },
-            { signal: controller.signal }
-          );
-          const text = response.choices[0]?.message?.content ?? "";
-          return {
-            text,
-            model: response.model,
-            inputTokens: response.usage?.prompt_tokens,
-            outputTokens: response.usage?.completion_tokens,
-          };
-        } catch (err) {
-          const status = (err as { status?: number })?.status;
-          if (status === 429) { lastError = err; continue; } // try next model
-          throw err;
+        // Retry up to 2 times on transient errors (503, network reset)
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await client.chat.completions.create(
+              { model: modelName, max_tokens: maxTokens ?? 2048, temperature, messages },
+              { signal: controller.signal }
+            );
+            const text = response.choices[0]?.message?.content ?? "";
+            return {
+              text,
+              model: response.model,
+              inputTokens: response.usage?.prompt_tokens,
+              outputTokens: response.usage?.completion_tokens,
+            };
+          } catch (err) {
+            const status = (err as { status?: number })?.status;
+            const isTransient = status === 503 || status === 502 || status === 429;
+            if (isTransient && attempt === 0) {
+              // Brief back-off before retry
+              await new Promise((r) => setTimeout(r, 1500));
+              lastError = err;
+              continue;
+            }
+            if (status === 429) { lastError = err; break; } // try next model
+            throw err;
+          }
         }
       }
       throw lastError;
@@ -217,22 +227,30 @@ export async function chat(
 
       let lastError: unknown;
       for (const modelName of modelList) {
-        try {
-          const response = await client.chat.completions.create(
-            { model: modelName, max_tokens: maxTokens ?? 2048, temperature, messages: oaiMessages },
-            { signal: controller.signal }
-          );
-          const text = response.choices[0]?.message?.content ?? "";
-          return {
-            text,
-            model: response.model,
-            inputTokens: response.usage?.prompt_tokens,
-            outputTokens: response.usage?.completion_tokens,
-          };
-        } catch (err) {
-          const status = (err as { status?: number })?.status;
-          if (status === 429) { lastError = err; continue; }
-          throw err;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await client.chat.completions.create(
+              { model: modelName, max_tokens: maxTokens ?? 2048, temperature, messages: oaiMessages },
+              { signal: controller.signal }
+            );
+            const text = response.choices[0]?.message?.content ?? "";
+            return {
+              text,
+              model: response.model,
+              inputTokens: response.usage?.prompt_tokens,
+              outputTokens: response.usage?.completion_tokens,
+            };
+          } catch (err) {
+            const status = (err as { status?: number })?.status;
+            const isTransient = status === 503 || status === 502 || status === 429;
+            if (isTransient && attempt === 0) {
+              await new Promise((r) => setTimeout(r, 1500));
+              lastError = err;
+              continue;
+            }
+            if (status === 429) { lastError = err; break; }
+            throw err;
+          }
         }
       }
       throw lastError;

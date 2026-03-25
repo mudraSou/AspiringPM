@@ -19,36 +19,41 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id;
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
 
-  const rl = await checkAIRateLimit(userId);
-  if (!rl.success) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+    const rl = await checkAIRateLimit(userId);
+    if (!rl.success) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
 
-  const body = await req.json();
-  const { description, title, company } = body;
-  if (!description?.trim()) return NextResponse.json({ error: "JD description required" }, { status: 400 });
+    const body = await req.json();
+    const { description, title, company } = body;
+    if (!description?.trim()) return NextResponse.json({ error: "JD description required" }, { status: 400 });
 
-  // Limit to 3 JDs
-  const count = await prisma.jobDescription.count({ where: { userId } });
-  if (count >= 3) {
-    return NextResponse.json({ error: "Maximum 3 JDs allowed. Delete one first." }, { status: 400 });
+    // Limit to 3 JDs
+    const count = await prisma.jobDescription.count({ where: { userId } });
+    if (count >= 3) {
+      return NextResponse.json({ error: "Maximum 3 JDs allowed. Delete one first." }, { status: 400 });
+    }
+
+    const keywords = await extractJDKeywords(description);
+
+    const jd = await prisma.jobDescription.create({
+      data: {
+        userId,
+        description,
+        title: title?.trim() || null,
+        company: company?.trim() || null,
+        extractedKeywords: keywords as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return NextResponse.json({ jd });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to save JD";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  const keywords = await extractJDKeywords(description);
-
-  const jd = await prisma.jobDescription.create({
-    data: {
-      userId,
-      description,
-      title: title?.trim() || null,
-      company: company?.trim() || null,
-      extractedKeywords: keywords as unknown as Prisma.InputJsonValue,
-    },
-  });
-
-  return NextResponse.json({ jd });
 }
 
 export async function DELETE(req: NextRequest) {

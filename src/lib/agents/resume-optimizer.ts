@@ -118,7 +118,8 @@ Return ONLY the JSON.`;
     model: "gpt",
     system: SYSTEM_PROMPT,
     maxTokens: 3000,
-    temperature: 0.3,
+    temperature: 0.1,   // lower = more consistent entry selection across regenerations
+    timeoutMs: 90000,   // resume generation is a large prompt — needs extra time
   });
 
   return parseJSONResponse<ResumeContent>(response.text);

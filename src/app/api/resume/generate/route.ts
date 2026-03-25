@@ -6,6 +6,7 @@ import { optimizeResume, calculateAtsScore } from "@/lib/agents/resume-optimizer
 import { Prisma } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
@@ -96,4 +97,8 @@ export async function POST(req: NextRequest) {
     },
     jd: { title: jd.title, company: jd.company },
   });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Resume generation failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

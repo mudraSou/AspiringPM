@@ -61,9 +61,11 @@ function AddJDModal({ onClose, onSaved }: { onClose: () => void; onSaved: (jd: J
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, company, description }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Failed to save JD"); return; }
-      onSaved(data.jd);
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore */ }
+      if (!res.ok) { setError((data.error as string) ?? "Failed to save JD"); return; }
+      onSaved(data.jd as JD);
     } finally {
       setSaving(false);
     }
@@ -225,9 +227,12 @@ export default function ResumePage() {
   const fetchJDs = useCallback(async () => {
     const res = await fetch("/api/resume/jd");
     if (res.ok) {
-      const data = await res.json();
-      setJds(data.jds);
-      if (data.jds.length > 0 && !selectedJdId) setSelectedJdId(data.jds[0].id);
+      const text = await res.text();
+      try {
+        const data = text ? JSON.parse(text) : {};
+        setJds(data.jds ?? []);
+        if (data.jds?.length > 0 && !selectedJdId) setSelectedJdId(data.jds[0].id);
+      } catch { /* ignore parse error */ }
     }
   }, [selectedJdId]);
 
@@ -246,9 +251,11 @@ export default function ResumePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jdId: selectedJdId }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Generation failed"); return; }
-      setResume(data);
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore */ }
+      if (!res.ok) { setError((data.error as string) ?? "Generation failed"); return; }
+      setResume(data as unknown as GeneratedResume);
     } finally {
       setGenerating(false);
     }

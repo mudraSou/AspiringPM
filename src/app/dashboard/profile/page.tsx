@@ -41,16 +41,32 @@ export default function ProfileEditPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/profile/settings").then((r) => r.json()),
-      fetch("/api/profile/entries").then((r) => r.json()),
-    ]).then(([settingsData, entriesData]) => {
-      setSettings(settingsData);
-      setSlug(settingsData.user?.publicProfileSlug ?? "");
-      setVisibility(settingsData.user?.profileVisibility ?? { skills: true, experiences: true, assignments: true, activity: true });
-      setHighlightedIds(settingsData.highlightedIds ?? []);
-      setEntries(entriesData.entries ?? []);
-    }).finally(() => setLoading(false));
+    async function load() {
+      try {
+        const [settingsRes, entriesRes] = await Promise.all([
+          fetch("/api/profile/settings"),
+          fetch("/api/profile/entries"),
+        ]);
+        const parseJson = async (res: Response) => {
+          const text = await res.text();
+          try { return text ? JSON.parse(text) : {}; } catch { return {}; }
+        };
+        const [settingsData, entriesData] = await Promise.all([
+          parseJson(settingsRes),
+          parseJson(entriesRes),
+        ]);
+        setSettings(settingsData);
+        setSlug(settingsData.user?.publicProfileSlug ?? "");
+        setVisibility(settingsData.user?.profileVisibility ?? { skills: true, experiences: true, assignments: true, activity: true });
+        setHighlightedIds(settingsData.highlightedIds ?? []);
+        setEntries(entriesData.entries ?? []);
+      } catch {
+        // silently fail — page shows empty state
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   async function save() {
@@ -63,8 +79,10 @@ export default function ProfileEditPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: slug.trim() || undefined, visibility, highlightedIds }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Save failed"); return; }
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { /* ignore */ }
+      if (!res.ok) { setError((data.error as string) ?? "Save failed"); return; }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } finally {
