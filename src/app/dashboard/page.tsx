@@ -265,10 +265,6 @@ export default async function DashboardPage() {
               </>
             )}
           </div>
-
-          <Link href="/onboarding/analysis" className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline mt-3">
-            Full analysis →
-          </Link>
         </div>
 
         {/* Col 2: Skill breakdown (actionable cards) */}
@@ -305,36 +301,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* ── Bottom row: Quick actions + Recent activity ───────── */}
-      <div className="grid sm:grid-cols-2 gap-5">
-
-        {/* Quick actions */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
-          <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-4">Quick Actions</h2>
-          <div className="space-y-1.5">
-            {[
-              { href: "/dashboard/resume", icon: "📄", label: "Build Resume for a JD", sub: "AI-powered, JD-matched" },
-              { href: "/dashboard/questions", icon: "💬", label: "Practice Interview Questions", sub: "Role-specific scenarios" },
-              { href: "/dashboard/profile", icon: "👤", label: "View Public Profile", sub: "Share your progress" },
-              { href: "/onboarding/analysis", icon: "📊", label: "View Full Analysis", sub: "Deep skill breakdown" },
-            ].map((a) => (
-              <Link
-                key={a.href}
-                href={a.href}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group"
-              >
-                <span className="text-xl flex-shrink-0">{a.icon}</span>
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-800 dark:text-gray-200 font-medium group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {a.label}
-                  </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{a.sub}</p>
-                </div>
-                <span className="ml-auto text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition-colors text-sm">→</span>
-              </Link>
-            ))}
-          </div>
-        </div>
+      {/* ── Bottom row: Recent activity (full width) ───────── */}
+      <div className="grid gap-5">
 
         {/* Recent activity */}
         {recentActivity.length > 0 ? (

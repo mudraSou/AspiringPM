@@ -24,20 +24,41 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 function ScoreBar({ score, label }: { score: number; label: string }) {
-  const color =
-    score >= 70 ? "bg-green-500" : score >= 45 ? "bg-yellow-500" : "bg-red-400";
+  // Positive progression palette: indigo → violet → amber → green
+  // Even 0% reads as "journey starting", not failure
+  const barColor =
+    score >= 70 ? "bg-green-500" :
+    score >= 45 ? "bg-amber-400" :
+    score >= 20 ? "bg-violet-400" :
+    "bg-indigo-400";
+
+  const textColor =
+    score >= 70 ? "text-green-600 dark:text-green-400" :
+    score >= 45 ? "text-amber-600 dark:text-amber-400" :
+    score >= 20 ? "text-violet-600 dark:text-violet-400" :
+    "text-indigo-500 dark:text-indigo-400";
+
+  const badge =
+    score >= 70 ? { label: "Strong", cls: "bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-400" } :
+    score >= 45 ? { label: "On track", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400" } :
+    score >= 20 ? { label: "Building", cls: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400" } :
+    { label: "Starting", cls: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400" };
+
   return (
     <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-700 dark:text-gray-300">{label}</span>
-        <span className={`font-semibold ${score >= 70 ? "text-green-600" : score >= 45 ? "text-yellow-600" : "text-red-500"}`}>
-          {score}%
-        </span>
+      <div className="flex justify-between items-center mb-1.5">
+        <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+            {badge.label}
+          </span>
+          <span className={`text-sm font-bold w-9 text-right ${textColor}`}>{score}%</span>
+        </div>
       </div>
       <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-700 ${color}`}
-          style={{ width: `${score}%` }}
+          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+          style={{ width: `${score > 0 ? Math.max(score, 3) : 0}%` }}
         />
       </div>
     </div>
@@ -86,22 +107,29 @@ export default async function AnalysisPage() {
   const overallScore = snapshot?.overallScore ?? 0;
   const roleLabel = ROLE_LABELS[user?.targetPmRole ?? ""] ?? "PM";
 
-  // Find top 2 categories for focus recommendations
   const sortedCategories = Object.entries(categoryScores ?? {})
     .sort(([, a], [, b]) => a - b)
     .slice(0, 2);
 
-  // Find top 3 high-priority PSI entries to highlight
   const highlightedEntries = entries.filter((e) => e.priority === "high").slice(0, 3);
+
+  const scoreColor =
+    overallScore >= 70 ? "text-green-600 dark:text-green-400" :
+    overallScore >= 45 ? "text-amber-500 dark:text-amber-400" :
+    overallScore >= 20 ? "text-violet-600 dark:text-violet-400" :
+    "text-indigo-600 dark:text-indigo-400";
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <div className="w-full h-1 bg-blue-600" />
+      {/* Indigo top bar */}
+      <div className="w-full h-1 bg-indigo-600" />
 
       <div className="max-w-3xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="text-center mb-10">
-          <span className="text-xs font-mono text-blue-600 uppercase tracking-wider">Step 6 of 6 — Analysis complete</span>
+          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+            Analysis complete
+          </span>
           <h1 className="mt-3 text-3xl font-bold text-gray-900 dark:text-white">
             Your PM Readiness Analysis
           </h1>
@@ -113,9 +141,7 @@ export default async function AnalysisPage() {
 
         {/* Overall score */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 mb-6 text-center">
-          <div className={`text-6xl font-bold mb-2 ${
-            overallScore >= 70 ? "text-green-600" : overallScore >= 45 ? "text-yellow-500" : "text-red-500"
-          }`}>
+          <div className={`text-6xl font-bold mb-2 ${scoreColor}`}>
             {overallScore}%
           </div>
           <div className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
@@ -142,7 +168,6 @@ export default async function AnalysisPage() {
           <h2 className="font-semibold text-gray-900 dark:text-white mb-5">Skills breakdown</h2>
           <div className="space-y-4">
             {skillCategories.map((cat) => {
-              // Find category score from snapshot
               const catKey = Object.keys(CATEGORY_LABELS).find(
                 (k) => CATEGORY_LABELS[k] === cat.name
               );
@@ -151,30 +176,33 @@ export default async function AnalysisPage() {
                 categoryScores?.[catScoreKey] ??
                 categoryScores?.[catKey ?? ""] ??
                 0;
-
-              return (
-                <ScoreBar key={cat.id} score={score} label={cat.name} />
-              );
+              return <ScoreBar key={cat.id} score={score} label={cat.name} />;
             })}
           </div>
         </div>
 
         {/* Focus areas */}
         {sortedCategories.length > 0 && (
-          <div className="bg-amber-50 dark:bg-amber-950 rounded-2xl border border-amber-200 dark:border-amber-800 p-6 mb-6">
+          <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-800 p-6 mb-6">
             <h2 className="font-semibold text-amber-900 dark:text-amber-100 mb-3">
               Your 2 focus areas
             </h2>
             <div className="space-y-2">
               {sortedCategories.map(([key, score]) => {
-                // Reverse-engineer category name from key
-                const label = Object.values(CATEGORY_LABELS).find((v) =>
-                  v.toLowerCase().replace(/[^a-z0-9]/g, "_").startsWith(key.replace(/[^a-z0-9]/g, "_").slice(0, 8))
-                ) ?? key;
+                const label =
+                  Object.values(CATEGORY_LABELS).find((v) =>
+                    v.toLowerCase().replace(/[^a-z0-9]/g, "_").startsWith(
+                      key.replace(/[^a-z0-9]/g, "_").slice(0, 8)
+                    )
+                  ) ?? key;
                 return (
                   <div key={key} className="flex items-center gap-3 text-sm">
-                    <span className="text-amber-600 dark:text-amber-400 font-mono text-xs w-10 flex-shrink-0">{score}%</span>
-                    <span className="text-amber-800 dark:text-amber-200">{label} — prioritize this in your learning path</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold w-10 flex-shrink-0">
+                      {score}%
+                    </span>
+                    <span className="text-amber-800 dark:text-amber-200">
+                      {label} — prioritize this in your learning path
+                    </span>
                   </div>
                 );
               })}
@@ -195,23 +223,23 @@ export default async function AnalysisPage() {
               {highlightedEntries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="border border-gray-100 dark:border-gray-800 rounded-xl p-4 hover:border-blue-200 dark:hover:border-blue-800 transition-colors"
+                  className="border border-gray-100 dark:border-gray-800 rounded-xl p-4 hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors"
                 >
                   {entry.problemStatement && (
                     <div className="mb-2">
-                      <span className="text-xs font-semibold text-red-600 uppercase tracking-wider">Problem</span>
+                      <span className="text-xs font-semibold text-rose-500 uppercase tracking-wider">Problem</span>
                       <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{entry.problemStatement}</p>
                     </div>
                   )}
                   {entry.solutionDescription && (
                     <div className="mb-2">
-                      <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Solution</span>
+                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Solution</span>
                       <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{entry.solutionDescription}</p>
                     </div>
                   )}
                   {entry.impactDescription && (
                     <div>
-                      <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">Impact</span>
+                      <span className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Impact</span>
                       <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{entry.impactDescription}</p>
                     </div>
                   )}
@@ -228,14 +256,14 @@ export default async function AnalysisPage() {
         )}
 
         {/* CTA */}
-        <div className="bg-blue-600 rounded-2xl p-8 text-center text-white">
+        <div className="bg-indigo-600 rounded-2xl p-8 text-center text-white">
           <h2 className="text-2xl font-bold mb-2">Ready to close the gaps?</h2>
-          <p className="text-blue-100 mb-6 text-sm">
+          <p className="text-indigo-200 mb-6 text-sm">
             Your personalized learning path is ready. Gated stages, curated resources, AI-evaluated assignments.
           </p>
           <Link
             href="/dashboard"
-            className="inline-block bg-white text-blue-600 px-8 py-3.5 rounded-xl font-semibold hover:bg-blue-50 transition-colors touch-target text-sm"
+            className="inline-block bg-white text-indigo-600 px-8 py-3.5 rounded-xl font-semibold hover:bg-indigo-50 transition-colors text-sm"
           >
             Go to my dashboard →
           </Link>
