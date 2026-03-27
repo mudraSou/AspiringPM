@@ -74,7 +74,7 @@ async function getStats() {
     }),
   ]);
 
-  const stageCountMap = Object.fromEntries(stageCounts.map((s) => [s.stageId, s._count.stageId]));
+  const stageCountMap = Object.fromEntries(stageCounts.map((s: { stageId: string; _count: { stageId: number } }) => [s.stageId, s._count.stageId]));
 
   return {
     totalUsers,
