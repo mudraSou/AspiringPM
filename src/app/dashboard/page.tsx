@@ -70,12 +70,10 @@ function SkillCard({
   label,
   score,
   isFocus,
-  rank,
 }: {
   label: string;
   score: number;
   isFocus: boolean;
-  rank: number;
 }) {
   const bg =
     score >= 70
@@ -169,7 +167,6 @@ export default async function DashboardPage() {
     stages.find((s) => !progressMap.has(s.id));
 
   // Days-to-milestone estimate: rough heuristic (1 sub-topic/day avg)
-  const remainingSubTopics = subTopicCount - completedSubTopicCount;
   const nextMilestonePct = [25, 50, 75, 100].find((m) => m > learningPct) ?? 100;
   const subTopicsToMilestone = Math.round(((nextMilestonePct - learningPct) / 100) * subTopicCount);
 
@@ -282,7 +279,6 @@ export default async function DashboardPage() {
                 label={row.label}
                 score={row.score}
                 isFocus={focusKeys.has(row.key)}
-                rank={i + 1}
               />
             ))}
           </div>

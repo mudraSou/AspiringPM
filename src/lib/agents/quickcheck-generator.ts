@@ -103,5 +103,6 @@ export function scoreQuickCheck(
 }
 
 export function stripAnswers(questions: QCQuestion[]): QCQuestionPublic[] {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return questions.map(({ correctOptionId: _c, explanation: _e, ...q }) => q);
 }

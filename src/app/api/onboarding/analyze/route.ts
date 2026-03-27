@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { runAnalysisPipeline, setStatus } from "@/lib/pipeline/analysis-pipeline";
+import { runAnalysisPipeline } from "@/lib/pipeline/analysis-pipeline";
 
 export async function POST() {
   const session = await auth();

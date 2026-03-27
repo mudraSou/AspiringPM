@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 
 interface Resource {
   title: string;
@@ -655,7 +654,7 @@ function StageCard({
           {stage.subTopics.length > 0 && (
             <div className="space-y-3 mb-6">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Sub-topics</h3>
-              {stage.subTopics.map((st, idx) => {
+              {stage.subTopics.map((st) => {
                 const prog = stage.subTopicProgress[st.id] ?? { status: "not_started", resourcesCompleted: [], quickCheckScore: null, quickCheckFeedback: null };
                 return (
                   <SubTopicPanel

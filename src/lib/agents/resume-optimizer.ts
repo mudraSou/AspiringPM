@@ -70,7 +70,7 @@ export async function optimizeResume(params: {
 
   const entriesText = psiEntries
     .map(
-      (e, i) =>
+      (e) =>
         `Entry ID: ${e.id}
 Problem: ${e.problemStatement ?? "N/A"}
 Solution: ${e.solutionDescription ?? "N/A"}
