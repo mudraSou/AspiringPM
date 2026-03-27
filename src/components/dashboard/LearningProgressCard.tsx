@@ -181,7 +181,7 @@ export default function LearningProgressCard({
       {/* CTA */}
       <Link
         href="/dashboard/learning"
-        className="flex items-center justify-center gap-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors"
+        className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors"
       >
         {learningPct === 100 ? "Review Your Path" : currentStageName ? `Continue: ${currentStageName}` : "Start Learning"}
         <span>→</span>
