@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import LearningProgressCard from "@/components/dashboard/LearningProgressCard";
+import { RetakeAssessmentButton } from "@/components/dashboard/RetakeAssessmentButton";
 import { redirect } from "next/navigation";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -206,6 +207,11 @@ export default async function DashboardPage() {
               </Link>
             )}
           </div>
+        </div>
+
+        {/* Retake assessment */}
+        <div className="mt-3">
+          <RetakeAssessmentButton />
         </div>
 
         {/* Progress strip */}
