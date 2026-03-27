@@ -2,72 +2,110 @@
 
 Built for career switchers — not born PMs. Upload your resume, get a readiness score, follow a personalized learning path, and generate JD-optimized resumes.
 
-## Getting Started
+**Stack:** Next.js 14 · Prisma · PostgreSQL · NextAuth v5 · Groq (llama-3.3-70b) · TypeScript · Tailwind
 
-1. Install dependencies:
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-2. Set up your `.env` file with your database and API keys (see `.env.example` if available).
+### 2. Configure environment variables
 
-3. Push the database schema:
+```bash
+cp .env.example .env
+```
+
+Fill in your `.env`. Minimum required to run:
+
+| Variable | Required | How to get it |
+|---|---|---|
+| `DATABASE_URL` | Yes | Supabase / Neon / Railway → pooled connection string |
+| `DIRECT_URL` | Yes | Same provider → direct connection string (no pgbouncer) |
+| `NEXTAUTH_SECRET` | Yes | `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | Yes | `http://localhost:3000` for local dev |
+| `GROQ_API_KEY` | Yes | [console.groq.com](https://console.groq.com) — free tier |
+| `RESEND_API_KEY` | No | Only for email notifications |
+| `GOOGLE_CLIENT_ID/SECRET` | No | Only for Google OAuth |
+| `ADMIN_EMAILS` | No | Your email — unlocks `/admin` |
+
+> **Why two database URLs?** `DATABASE_URL` goes through a connection pooler (faster for the app). `DIRECT_URL` is a raw connection that Prisma needs for schema changes (`db push`). Supabase and Neon both provide both URLs in their dashboard.
+
+### 3. Push schema to database
 
 ```bash
 npx prisma db push
-npx prisma generate
 ```
 
-4. Seed learning stages:
+### 4. Seed the database
 
 ```bash
-npx tsx scripts/seed.ts
+npx prisma db seed
 ```
 
-5. Run the development server:
+**This step is required.** Without it the app has no skill taxonomy, learning stages, or question bank — core features will be empty or broken.
+
+Loads: 8 skill categories · 38 skills · learning stages + sub-topics · question bank · role skill weights.
+
+### 5. Start the dev server
 
 ```bash
-npm run dev -- --port 3003
+npm run dev
 ```
 
-Open [http://localhost:3003](http://localhost:3003) in your browser.
+Open [http://localhost:3000](http://localhost:3000). Start at `/auth/signup` to create an account.
 
-Start the user journey at [http://localhost:3003/auth/login](http://localhost:3003/auth/login).
+> Next.js auto-increments the port (3001, 3002…) if 3000 is occupied. Check terminal output for the actual port. If port changes, delete `.next` and hard-refresh the browser (`Ctrl+Shift+R`).
+
+---
 
 ## Key Routes
 
 | Route | Description |
-|-------|-------------|
-| `/auth/login` | Sign in |
+|---|---|
 | `/auth/signup` | Create account |
+| `/auth/login` | Sign in |
 | `/onboarding/upload` | Resume upload — start here |
 | `/onboarding/analysis` | AI readiness analysis |
 | `/dashboard` | Main dashboard |
-| `/dashboard/learning` | Learning path (11 stages) |
-| `/dashboard/resume` | Resume builder |
+| `/dashboard/learning` | Learning path (gated stages) |
+| `/dashboard/resume` | AI resume builder |
 | `/dashboard/questions` | Interview practice |
+| `/dashboard/profile` | Public profile settings |
+| `/profile/[username]` | Public-facing profile |
+| `/discover` | PM fit quiz (no login needed) |
+| `/admin` | User management (admin only) |
+
+---
 
 ## Scripts
 
 ```bash
-# Generate AI learning content for sub-topics
-node scripts/generate-content.mjs --stage 1
-
-# Reset a user's onboarding data
+# Reset a user back to onboarding
 node scripts/reset-user.mjs
 
-# Run test suites
-node scripts/test-mcq.mjs
-node scripts/test-dashboard.mjs
-node scripts/test-progress-card.mjs
+# Run full test suite (97 tests)
+node scripts/test-suite.mjs
+
+# Run learning flow tests
+node scripts/test-learning.mjs
+
+# Generate AI content for sub-topics
+node scripts/generate-content.mjs --stage 1
 ```
 
-## Tech Stack
+---
 
-- **Framework**: Next.js 14 App Router
-- **Database**: PostgreSQL via Prisma
-- **AI**: Groq (llama-3.3-70b) with fallback to llama-3.1-8b
-- **Auth**: NextAuth v5 (email/password)
-- **Email**: Resend
-- **Styling**: Tailwind CSS
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `prisma db push` hangs | Make sure `DIRECT_URL` is set — the pooled URL won't work for schema changes |
+| Empty learning path / no questions | Run `npx prisma db seed` |
+| AI features fail silently | Check `GROQ_API_KEY` is set. Free tier limit: 100K tokens/day |
+| ChunkLoadError after restart | Delete `.next` folder, restart, hard-refresh browser |
+| Port conflict on Windows (Git Bash) | `taskkill.exe //PID <pid> //F` |
