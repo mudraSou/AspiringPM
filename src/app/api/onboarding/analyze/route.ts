@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { runAnalysisPipeline } from "@/lib/pipeline/analysis-pipeline";
 
+// Allow up to 60s for the AI pipeline on Vercel
+export const maxDuration = 60;
+
 export async function POST() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -9,11 +12,11 @@ export async function POST() {
   }
   const userId = session.user.id;
 
-  // Run pipeline in background — don't await (Vercel serverless won't keep connection)
-  // Deduplication is handled inside runAnalysisPipeline — safe to call multiple times
-  runAnalysisPipeline(userId).catch((err) => {
+  try {
+    await runAnalysisPipeline(userId);
+    return NextResponse.json({ started: true });
+  } catch (err) {
     console.error(`Pipeline failed for user ${userId}:`, err);
-  });
-
-  return NextResponse.json({ started: true });
+    return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
+  }
 }

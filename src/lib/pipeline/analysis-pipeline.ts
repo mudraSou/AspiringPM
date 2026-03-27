@@ -35,52 +35,23 @@ export interface PipelineStatus {
   };
 }
 
-// In-memory fallback when Redis not available.
-// Pinned to globalThis so all Next.js route modules share the same instance
-// (in dev mode, each route handler gets its own module cache otherwise).
-const g = globalThis as unknown as {
-  _pipelineStore?: Map<string, PipelineStatus>;
-  _runningPipelines?: Set<string>;
-};
-if (!g._pipelineStore) g._pipelineStore = new Map<string, PipelineStatus>();
-if (!g._runningPipelines) g._runningPipelines = new Set<string>();
-const inMemoryStore = g._pipelineStore;
-const runningPipelines = g._runningPipelines;
+// Local deduplication — prevents double-submit within the same process instance
+const runningPipelines = new Set<string>();
 
 export async function setStatus(userId: string, status: PipelineStatus) {
-  inMemoryStore.set(userId, status);
-
-  // Also try Redis if available
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    try {
-      const { Redis } = await import("@upstash/redis");
-      const redis = new Redis({
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-      });
-      await redis.setex(`pipeline:${userId}`, 3600, JSON.stringify(status));
-    } catch {
-      // Redis write failed — in-memory fallback will serve
-    }
-  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { pipelineStatus: status as unknown as import("@prisma/client").Prisma.InputJsonValue },
+  });
 }
 
 export async function getStatus(userId: string): Promise<PipelineStatus | null> {
-  // Try Redis first
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    try {
-      const { Redis } = await import("@upstash/redis");
-      const redis = new Redis({
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-      });
-      const raw = await redis.get<string>(`pipeline:${userId}`);
-      if (raw) return typeof raw === "string" ? JSON.parse(raw) : raw;
-    } catch {
-      // Fall through to in-memory
-    }
-  }
-  return inMemoryStore.get(userId) ?? null;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { pipelineStatus: true },
+  });
+  if (!user?.pipelineStatus) return null;
+  return user.pipelineStatus as unknown as PipelineStatus;
 }
 
 /**

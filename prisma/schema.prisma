@@ -29,6 +29,7 @@ model User {
 
   onboardingCompleted Boolean @default(false)
   onboardingStep      String  @default("resume")
+  pipelineStatus      Json?
 
   publicProfileSlug String? @unique
   profileVisibility Json    @default("{\"skills\": true, \"experiences\": true, \"assignments\": true, \"activity\": true}")
