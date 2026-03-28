@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { redirect } from "next/navigation";
+import { DeleteUserButton } from "./DeleteUserButton";
 
 const ROLE_LABELS: Record<string, string> = {
   consumer: "Consumer PM", growth: "Growth PM", technical: "Technical PM",
@@ -167,6 +168,10 @@ export default async function AdminUserDetailPage({ params }: { params: { id: st
             </Link>
           </div>
         )}
+
+        <div className="mt-5 pt-5 border-t border-gray-800 flex justify-end">
+          <DeleteUserButton userId={user.id} userEmail={user.email} />
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
