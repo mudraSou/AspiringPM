@@ -34,7 +34,7 @@ export default function SignupPage() {
       await signIn("credentials", {
         email,
         password,
-        callbackUrl: "/onboarding/upload",
+        callbackUrl: "/dashboard",
         redirect: true,
       });
     } finally {
@@ -44,7 +44,7 @@ export default function SignupPage() {
 
   async function handleGoogleSignup() {
     setLoading(true);
-    await signIn("google", { callbackUrl: "/onboarding/upload" });
+    await signIn("google", { callbackUrl: "/dashboard" });
   }
 
   return (
