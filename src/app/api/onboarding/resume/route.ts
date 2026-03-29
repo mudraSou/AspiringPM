@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
+import { createRequire } from "module";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -33,12 +34,16 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
   }
   if (mimeType === "application/pdf") {
     try {
+      // Use createRequire to load pdf-parse's lib file directly, bypassing
+      // the package's test-file check that fails in serverless environments.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mod = await import("pdf-parse") as any;
-      const pdfParse = mod.default ?? mod;
+      const _require = createRequire(import.meta.url);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pdfParse = _require("pdf-parse/lib/pdf-parse.js") as any;
       const result = await pdfParse(buffer);
       return result.text ?? "";
-    } catch {
+    } catch (err) {
+      console.error("PDF parse error:", err);
       return "";
     }
   }
