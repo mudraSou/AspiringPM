@@ -4,7 +4,6 @@ import Link from "next/link";
 import LearningProgressCard from "@/components/dashboard/LearningProgressCard";
 import { RetakeAssessmentButton } from "@/components/dashboard/RetakeAssessmentButton";
 import { redirect } from "next/navigation";
-import { isAdminEmail } from "@/lib/admin";
 
 const ROLE_LABELS: Record<string, string> = {
   consumer: "Consumer PM",
@@ -145,7 +144,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  if (!user?.onboardingCompleted && !isAdminEmail(session.user.email)) redirect("/onboarding/upload");
+  if (!user?.onboardingCompleted) redirect("/onboarding/upload");
 
   const score = snapshot?.overallScore ?? 0;
   const categoryScores = snapshot?.categoryScores as Record<string, number> | null;
