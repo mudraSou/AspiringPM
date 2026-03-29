@@ -6,7 +6,10 @@ import Link from "next/link";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
 
-  if (!session?.user?.id || !isAdminEmail(session.user.email)) {
+  if (!session?.user?.id) {
+    redirect("/auth/login");
+  }
+  if (!isAdminEmail(session.user.email)) {
     redirect("/dashboard");
   }
 
