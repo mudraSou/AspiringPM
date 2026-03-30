@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { createRequire } from "module";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -34,14 +33,20 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
   }
   if (mimeType === "application/pdf") {
     try {
-      // Use createRequire to load pdf-parse's lib file directly, bypassing
-      // the package's test-file check that fails in serverless environments.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const _require = createRequire(import.meta.url);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParse = _require("pdf-parse/lib/pdf-parse.js") as any;
-      const result = await pdfParse(buffer);
-      return result.text ?? "";
+      // pdfjs-dist: no test-file side effects, works reliably in serverless
+      const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      GlobalWorkerOptions.workerSrc = ""; // disable worker thread in Node.js
+      const loadingTask = getDocument({ data: new Uint8Array(buffer) });
+      const pdf = await loadingTask.promise;
+      const pages: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pageText = content.items.map((item: any) => item.str ?? "").join(" ");
+        pages.push(pageText);
+      }
+      return pages.join("\n");
     } catch (err) {
       console.error("PDF parse error:", err);
       return "";
