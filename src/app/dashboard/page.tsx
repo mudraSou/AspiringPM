@@ -147,7 +147,7 @@ export default async function DashboardPage() {
 
   if (!user?.onboardingCompleted && !isAdminEmail(session.user.email)) redirect("/onboarding/upload");
 
-  const score = snapshot?.overallScore ?? 0;
+  const baseScore = snapshot?.overallScore ?? 0;
   const categoryScores = snapshot?.categoryScores as Record<string, number> | null;
   const roleLabel = ROLE_LABELS[user?.targetPmRole ?? ""] ?? "PM";
   const firstName = user?.name?.split(" ")[0] ?? "";
@@ -164,6 +164,10 @@ export default async function DashboardPage() {
   const progressMap = new Map(allProgress.map((p) => [p.stageId, p.status]));
   const completedCount = allProgress.filter((p) => p.status === "completed" || p.status === "skipped").length;
   const learningPct = subTopicCount > 0 ? Math.round((completedSubTopicCount / subTopicCount) * 100) : 0;
+
+  // Readiness score = assessment baseline + learning progress fills the remaining gap to 100%
+  const stagePct = stages.length > 0 ? completedCount / stages.length : 0;
+  const score = Math.round(baseScore + stagePct * (100 - baseScore));
   const currentStage =
     stages.find((s) => progressMap.get(s.id) === "in_progress") ??
     stages.find((s) => !progressMap.has(s.id));

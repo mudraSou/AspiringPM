@@ -180,10 +180,7 @@ Return ONLY the JSON.`;
     }
 
     const categoryScore = categoryTotal / categorySkills.length;
-    const categoryKey = rw.skillCategory.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "_");
-    categoryScores[categoryKey] = Math.round(categoryScore);
+    categoryScores[rw.skillCategory.id] = Math.round(categoryScore);
     overallScore += categoryScore * Number(rw.weight);
   }
 
