@@ -33,14 +33,14 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
   }
   if (mimeType === "application/pdf") {
     try {
-      // pdfjs-dist: no test-file side effects, works reliably in serverless
       const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      // v5 requires an explicit workerSrc — empty string is treated as "not set"
+      // Use createRequire so the path resolves correctly after Next.js compilation on Vercel.
+      // process.cwd() is unreliable in serverless; module resolution from import.meta.url is not.
+      const { createRequire } = await import("module");
       const { pathToFileURL } = await import("url");
-      const { join } = await import("path");
-      GlobalWorkerOptions.workerSrc = pathToFileURL(
-        join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")
-      ).href;
+      const req = createRequire(import.meta.url);
+      const workerPath = req.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
       const loadingTask = getDocument({ data: new Uint8Array(buffer) });
       const pdf = await loadingTask.promise;
       const pages: string[] = [];
@@ -53,7 +53,7 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
       }
       return pages.join("\n");
     } catch (err) {
-      console.error("PDF parse error:", err);
+      console.error("[PDF] extraction error:", err);
       return "";
     }
   }
