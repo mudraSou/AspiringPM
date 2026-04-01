@@ -35,7 +35,12 @@ async function extractText(buffer: Buffer, mimeType: string): Promise<string> {
     try {
       // pdfjs-dist: no test-file side effects, works reliably in serverless
       const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      GlobalWorkerOptions.workerSrc = ""; // disable worker thread in Node.js
+      // v5 requires an explicit workerSrc — empty string is treated as "not set"
+      const { pathToFileURL } = await import("url");
+      const { join } = await import("path");
+      GlobalWorkerOptions.workerSrc = pathToFileURL(
+        join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")
+      ).href;
       const loadingTask = getDocument({ data: new Uint8Array(buffer) });
       const pdf = await loadingTask.promise;
       const pages: string[] = [];

@@ -3,7 +3,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  serverExternalPackages: ["pdfjs-dist"],
+  experimental: {
+    serverComponentsExternalPackages: ["pdfjs-dist"],
+  },
 };
 
 export default nextConfig;
